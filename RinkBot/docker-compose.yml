@@ -1,0 +1,29 @@
+services:
+  rinkbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rinkbot:latest
+    container_name: rinkbot
+    ports:
+      - "3000:3000"
+
+    # ── Variables de entorno ──────────────────────────────────
+    # Desarrollo: usa el archivo .env existente.
+    # Producción: elimina env_file y define las variables en el
+    #             dashboard de Railway/Render o como secrets.
+    env_file:
+      - ./Backend/.env
+
+    # ── Google Drive service account (solo si se usa Drive sync)
+    # El archivo debe existir localmente antes de `docker compose up`.
+    # Si no usas Drive sync, comenta este bloque.
+    volumes:
+      - ./Backend/config/service-account.json:/app/Backend/config/service-account.json:ro
+
+    restart: unless-stopped
+
+    # El health check del Dockerfile controla cuándo el contenedor
+    # se considera "healthy". Aquí solo añadimos el timeout de inicio.
+    healthcheck:
+      start_period: 15s

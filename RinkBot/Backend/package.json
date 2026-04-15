@@ -1,0 +1,30 @@
+{
+  "name": "rinkbot-backend",
+  "version": "1.0.0",
+  "description": "RinkBot Backend (Express + Supabase + Drive RAG)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check db.js && node --check auth.js",
+    "gen:cert": "bash generate-cert.sh"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.3.2",
+    "googleapis": "^168.0.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mammoth": "^1.11.0",
+    "openai": "^6.9.1",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.16.3",
+    "pino": "^10.3.1"
+  }
+}

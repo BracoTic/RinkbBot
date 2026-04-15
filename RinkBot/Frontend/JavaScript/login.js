@@ -1,0 +1,54 @@
+// Frontend/JavaScript/login.js
+document.addEventListener("DOMContentLoaded", () => {
+  const API_BASE_URL = window.RINKBOT_API_BASE || "http://localhost:3000";
+  const form = document.getElementById("loginForm");
+  const errorMsg = document.getElementById("error-message");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const user = document.getElementById("username").value.trim();
+    const pass = document.getElementById("password").value.trim();
+
+    errorMsg.style.display = "none";
+    errorMsg.textContent = "";
+
+    if (!user || !pass) {
+      errorMsg.textContent = "Por favor ingresa usuario y contraseña.";
+      errorMsg.style.display = "block";
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario: user, password: pass }),
+      });
+
+      if (!res.ok) {
+        const dataErr = await res.json().catch(() => ({}));
+        errorMsg.textContent = dataErr.error || "Usuario o contraseña incorrectos";
+        errorMsg.style.display = "block";
+        return;
+      }
+
+      const data = await res.json();
+
+      if (!data.ok || !data.user || !data.token) {
+        errorMsg.textContent = "No se pudo iniciar sesión. Intenta de nuevo.";
+        errorMsg.style.display = "block";
+        return;
+      }
+
+      // Guardamos usuario y token JWT
+      localStorage.setItem("rinkbot_user", JSON.stringify(data.user));
+      localStorage.setItem("rinkbot_token", data.token);
+
+      window.location.href = "homelogin.html";
+    } catch (err) {
+      errorMsg.textContent = "Error al conectar con el servidor. Intenta más tarde.";
+      errorMsg.style.display = "block";
+    }
+  });
+});

@@ -1,0 +1,18 @@
+# Dependencias — se instalan dentro de la imagen
+Backend/node_modules/
+
+# Secretos — NUNCA copiar al contenedor
+Backend/.env
+Backend/.env.*
+Backend/config/service-account.json
+**/service-account*.json
+**/credentials*.json
+
+# Archivos de desarrollo y sistema
+.git/
+.claude/
+*.zip
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

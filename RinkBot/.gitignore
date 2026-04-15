@@ -1,0 +1,41 @@
+# Dependencies
+Backend/node_modules/
+node_modules/
+
+# Environment variables (API keys - never commit)
+Backend/.env
+.env
+*.env
+.env.*
+
+# Service account credentials
+Backend/config/service-account.json
+**/service-account*.json
+**/credentials*.json
+**/client_secret*.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.suo
+*.user
+
+# Build artifacts
+dist/
+build/
+
+# Zip backups
+*.zip
+
+# TLS certificates (generados localmente, no commitear)
+Backend/certs/
+
+# Claude Code local settings
+.claude/
