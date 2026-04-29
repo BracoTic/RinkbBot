@@ -1298,3 +1298,25 @@
   border-radius: 10px;
   margin-bottom: 6px;
 }
+
+// ── Upload progress bar ───────────────────────────────────
+.upload-progress-bar {
+  margin: 0 12px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.upload-progress-fill {
+  height: 4px;
+  min-width: 4px;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.upload-progress-label {
+  font-size: 11px;
+  color: var(--text-primary);
+  opacity: 0.6;
+}

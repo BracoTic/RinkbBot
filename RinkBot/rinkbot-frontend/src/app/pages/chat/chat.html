@@ -142,6 +142,16 @@
         @if (fileError) {
           <div class="file-error">{{ fileError }}</div>
         }
+        @if (uploadProgress() !== null) {
+          <div class="upload-progress-bar">
+            <div class="upload-progress-fill"
+                 [style.width.%]="uploadProgress()">
+            </div>
+            <span class="upload-progress-label">
+              Subiendo imagen {{ uploadProgress() }}%
+            </span>
+          </div>
+        }
 
         <div class="composer-row">
           <input #chatFileInput type="file" accept="image/jpeg,image/png,image/gif,image/webp"

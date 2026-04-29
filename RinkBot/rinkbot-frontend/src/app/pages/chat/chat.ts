@@ -77,12 +77,16 @@ export class Chat implements OnDestroy {
   imagePreview: string | null = null;
   fileError = '';
 
+  // ── Upload progress ───────────────────────────────────────
+  readonly uploadProgress = signal<number | null>(null);
+
   // ── Error ────────────────────────────────────────────────
   readonly apiError = signal('');
 
   // ── Voz ──────────────────────────────────────────────────
   voiceError = '';
   private voiceSub: Subscription | null = null;
+  private sendSub:  Subscription | null = null;
 
   // ── Avatar upload ────────────────────────────────────────
   readonly avatarPreview = signal<string | null>(null);
@@ -137,12 +141,18 @@ export class Chat implements OnDestroy {
     this.imagePreview = null;
     this.fileError    = '';
     this.apiError.set('');
+    if (file) this.uploadProgress.set(0);
     if (this.activeSection() !== 'chat') this.showSection('chat');
-    this.chatSvc.sendMessage(text, file, preview).subscribe({
+    this.sendSub = this.chatSvc.sendMessage(text, file, preview).subscribe({
+      next: (val) => {
+        if (typeof val === 'number') this.uploadProgress.set(val);
+      },
       error: (err: HttpErrorResponse) => {
+        this.uploadProgress.set(null);
         if (err.status === 401) this.auth.logout();
         else this.apiError.set('No se pudo obtener respuesta. Intenta de nuevo.');
       },
+      complete: () => this.uploadProgress.set(null),
     });
   }
 
@@ -338,7 +348,7 @@ export class Chat implements OnDestroy {
     this.voiceSub = this.voiceSvc.startListening().subscribe({
       next: transcript => {
         this.chatSvc.sendMessage(transcript).subscribe({
-          next: reply => this.voiceSvc.speak(reply),
+          next: reply => { if (typeof reply === 'string') this.voiceSvc.speak(reply); },
           error: () => {},
         });
       },
@@ -360,6 +370,7 @@ export class Chat implements OnDestroy {
 
   ngOnDestroy(): void {
     this.voiceSub?.unsubscribe();
+    this.sendSub?.unsubscribe();
     this.voiceSvc.stopSpeaking();
   }
 }
