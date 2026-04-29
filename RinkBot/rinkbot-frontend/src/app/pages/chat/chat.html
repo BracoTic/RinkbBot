@@ -1,0 +1,613 @@
+<!-- Fondo -->
+<div class="app-bg"></div>
+
+<!-- Input de archivo para avatar (siempre en DOM, fuera de @if) -->
+<input #avatarFileInput type="file" accept="image/jpeg,image/png,image/webp"
+       class="sr-only" (change)="onAvatarFileChange($event)" />
+
+<!-- ═══════════════════════════════════════════════════════
+     RAIL IZQUIERDO
+════════════════════════════════════════════════════════ -->
+<aside class="left-rail">
+  <!-- Logo Rinko -->
+  <div class="brand-top">
+    <button class="brand-logo-btn" (click)="showSection('welcome')" title="Inicio">
+      <img src="assets/Rinko.png" alt="Rinko" class="brand-logo" />
+    </button>
+  </div>
+
+  <!-- Avatar + nombre -->
+  <div class="user-info">
+    <button class="avatar-btn" (click)="showAccount.set(true)">
+      <img [src]="prefsSvc.avatarUrl()" alt="Usuario" class="avatar" />
+    </button>
+    <span class="user-name">{{ user?.nombre || 'Mi cuenta' }}</span>
+  </div>
+
+  <!-- Navegación principal -->
+  <nav class="left-nav">
+    <button class="icon-btn" title="Mensajes guardados"
+            [class.active]="openPanel() === 'mensajes'"
+            (click)="togglePanel('mensajes')">💬</button>
+
+    <button class="icon-btn" title="Actividad reciente"
+            [class.active]="openPanel() === 'tiempo'"
+            (click)="togglePanel('tiempo')">🕒</button>
+
+    <button class="icon-btn" title="Favoritos"
+            [class.active]="openPanel() === 'favoritos'"
+            (click)="togglePanel('favoritos')">⭐</button>
+
+    <button class="icon-btn" title="Configuración"
+            [class.active]="openPanel() === 'ajustes'"
+            (click)="togglePanel('ajustes')">⚙️</button>
+  </nav>
+
+  <!-- Logout -->
+  <div class="left-bottom">
+    <button class="logout-btn" (click)="logout()" title="Cerrar sesión">
+      <svg class="logout-icon" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      <span class="logout-label">Cerrar Sesión</span>
+    </button>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════════════════════════
+     CONTENIDO CENTRAL
+════════════════════════════════════════════════════════ -->
+<main class="main">
+
+  <!-- 1. Bienvenida -->
+  @if (activeSection() === 'welcome') {
+    <div class="center-welcome">
+      <img src="assets/RinkBotGra.png" alt="RinkBot" class="hero-logo" />
+      <button class="cta-btn" (click)="showSection('options')">¡Hablemos!</button>
+    </div>
+  }
+
+  <!-- 2. Opciones -->
+  @if (activeSection() === 'options') {
+    <div class="chat-options">
+      <article class="option-card">
+        <img src="assets/RinkoEscribe.png" class="option-image" alt="Chatear" />
+        <h2 class="option-title">Para <span>CHATEAR</span> conmigo</h2>
+        <button class="option-btn" (click)="showSection('chat')">haz click aquí</button>
+      </article>
+      <article class="option-card">
+        <img src="assets/RinkoHabla.png" class="option-image" alt="Hablar" />
+        <h2 class="option-title">Para <span>HABLAR</span> conmigo</h2>
+        <button class="option-btn" (click)="showSection('voice')">haz click aquí</button>
+      </article>
+    </div>
+  }
+
+  <!-- 3. Chat de TEXTO -->
+  @if (activeSection() === 'chat') {
+    <section class="chat-section">
+      @if (!chatSvc.messages().length) {
+        <h1 class="chat-title">¡Hola! Soy Rinkbot 🐯 ¿En qué debemos profundizar hoy?</h1>
+      }
+
+      <div class="chat-surface" [class.expanded]="chatSvc.messages().length > 0">
+
+        <div class="messages" #messagesEl aria-live="polite">
+          @for (msg of chatSvc.messages(); track msg.timestamp) {
+            <div class="msg-row" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+              @if (msg.role === 'assistant') {
+                <img src="assets/Rinko.png" alt="Rinko" class="chat-avatar" />
+              }
+              <div class="bubble" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+                @if (msg.imagenPreview) {
+                  <img [src]="msg.imagenPreview" class="msg-img" alt="imagen adjunta">
+                }
+                @if (msg.role === 'assistant') {
+                  <div class="md-content" [innerHTML]="md(msg.content)"></div>
+                } @else {
+                  {{ msg.content }}
+                }
+              </div>
+              @if (msg.role === 'user') {
+                <img [src]="prefsSvc.avatarUrl()" alt="Tú" class="chat-avatar" />
+              }
+            </div>
+          }
+
+          @if (chatSvc.isLoading()) {
+            <div class="msg-row bot">
+              <img src="assets/Rinko.png" alt="Rinko" class="chat-avatar" />
+              <div class="bubble bot">
+                <div class="typing-dots"><span></span><span></span><span></span></div>
+              </div>
+            </div>
+          }
+        </div>
+
+        @if (apiError()) {
+          <div class="api-error">⚠️ {{ apiError() }}</div>
+        }
+
+        @if (imagePreview) {
+          <div class="img-preview-bar">
+            <img [src]="imagePreview" class="img-preview-thumb" alt="preview">
+            <span class="img-preview-name">{{ selectedFile?.name }}</span>
+            <button type="button" class="img-preview-remove" (click)="removeImage()" title="Quitar imagen">✕</button>
+          </div>
+        }
+        @if (fileError) {
+          <div class="file-error">{{ fileError }}</div>
+        }
+
+        <div class="composer-row">
+          <input #chatFileInput type="file" accept="image/jpeg,image/png,image/gif,image/webp"
+                 style="display:none" (change)="onFileSelect($event)">
+          <textarea class="composer-input" [(ngModel)]="inputText"
+                    placeholder="Escribe tu mensaje" aria-label="Mensaje"
+                    (keydown.enter)="onEnter($event)"></textarea>
+          <div class="composer-actions">
+            <button type="button" class="btn attach-btn" title="Adjuntar imagen"
+                    (click)="chatFileInput.click()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                   fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+            <button class="btn mic-btn" [class.listening]="voiceSvc.isListening()"
+                    (click)="toggleVoice()" title="Dictado por voz">🎙️</button>
+            <button class="btn" (click)="send()"
+                    [disabled]="chatSvc.isLoading() || !inputText.trim()">ENVIAR</button>
+          </div>
+        </div>
+
+        <div class="chat-toolbar">
+          <button class="btn secondary" (click)="newChat()">NUEVO CHAT</button>
+          <button class="btn secondary" (click)="openSaveModal()"
+                  [disabled]="!chatSvc.messages().length">GUARDAR</button>
+        </div>
+      </div>
+    </section>
+  }
+
+  <!-- 4. Chat de VOZ -->
+  @if (activeSection() === 'voice') {
+    <section class="voice-section">
+      <h1 class="chat-title">Notas de voz con Rinkbot 🐯</h1>
+
+      <div class="voice-surface">
+        <div class="messages" #messagesEl aria-live="polite">
+          @for (msg of chatSvc.messages(); track msg.timestamp) {
+            <div class="msg-row" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+              @if (msg.role === 'assistant') {
+                <img src="assets/Rinko.png" alt="Rinko" class="chat-avatar" />
+              }
+              <div class="bubble" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+                @if (msg.imagenPreview) {
+                  <img [src]="msg.imagenPreview" class="msg-img" alt="imagen adjunta">
+                }
+                @if (msg.role === 'assistant') {
+                  <div class="md-content" [innerHTML]="md(msg.content)"></div>
+                } @else {
+                  {{ msg.content }}
+                }
+              </div>
+              @if (msg.role === 'user') {
+                <img [src]="prefsSvc.avatarUrl()" alt="Tú" class="chat-avatar" />
+              }
+            </div>
+          }
+          @if (chatSvc.isLoading()) {
+            <div class="msg-row bot">
+              <img src="assets/Rinko.png" alt="Rinko" class="chat-avatar" />
+              <div class="bubble bot">
+                <div class="typing-dots"><span></span><span></span><span></span></div>
+              </div>
+            </div>
+          }
+        </div>
+
+        <div class="voice-composer">
+          @if (!voiceSvc.isSupported()) {
+            <span class="voice-hint voice-error">⚠️ El micrófono requiere HTTPS o Chrome/Edge.</span>
+          } @else {
+            <button class="btn voice-record-btn" [class.recording]="voiceSvc.isListening()"
+                    (click)="toggleVoice()">
+              {{ voiceSvc.isListening() ? '⏹ Dejar de hablar' : '🎙️ Tocar para hablar' }}
+            </button>
+            <span class="voice-hint">
+              @if (voiceError)               { ⚠️ {{ voiceError }} }
+              @else if (voiceSvc.isListening()) { 🎙️ Escuchando... habla ahora. }
+              @else if (chatSvc.isLoading())    { ⌛ Consultando a Rinkbot... }
+              @else if (voiceSvc.isSpeaking())  { 🔊 Rinkbot está respondiendo... }
+              @else                             { Rinkbot te escucha con tu micrófono. }
+            </span>
+          }
+        </div>
+
+        <div class="voice-toolbar">
+          <button class="btn secondary" (click)="newChat()">Nuevo chat</button>
+          <button class="btn secondary" (click)="openSaveModal()"
+                  [disabled]="!chatSvc.messages().length">Guardar</button>
+        </div>
+      </div>
+    </section>
+  }
+
+</main>
+
+<!-- ═══════════════════════════════════════════════════════
+     RAIL DERECHO
+════════════════════════════════════════════════════════ -->
+<aside class="right-rail">
+  <div class="right-top">
+    <button class="icon-btn" title="Dark/Light" (click)="toggleDark()">
+      {{ prefsSvc.isDark() ? '☀️' : '🌙' }}
+    </button>
+  </div>
+
+  <nav class="right-nav">
+    <button class="icon-btn" title="Próximamente">🎧</button>
+    <button class="icon-btn" title="Próximamente">✉️</button>
+    <button class="icon-btn" title="Próximamente">🎥</button>
+  </nav>
+
+  <div class="right-bottom">
+    <button class="hseq-btn" title="HSEQ">
+      <img src="assets/HSEQLogo.png" alt="HSEQ" class="hseq-logo" />
+    </button>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════════════════════════
+     PANELES DESLIZANTES
+════════════════════════════════════════════════════════ -->
+<div class="slide-panels-host">
+
+  <!-- ── MENSAJES (historial BD) ─────────────────────────── -->
+  <aside class="slide-panel" [class.open]="openPanel() === 'mensajes'" aria-label="Mensajes guardados">
+    <header class="panel-header">
+      <h3>Mensajes guardados</h3>
+      <button class="close-panel" (click)="closePanel()">✕</button>
+    </header>
+    <div class="panel-body mensajes-body">
+      @if (!selectedChat()) {
+        <div class="panel-actions">
+          <button class="btn secondary" (click)="loadHistory()">Refrescar</button>
+        </div>
+        @if (loadingHistory()) {
+          <p class="panel-hint">Cargando...</p>
+        } @else if (!historyChats().length) {
+          <p class="panel-hint">No hay conversaciones guardadas.</p>
+        } @else {
+          <div class="chats-list">
+            @for (chat of historyChats(); track chat.id) {
+              <div class="chat-card">
+                <div class="chat-card-top">
+                  <div>
+                    <p class="chat-card-title">{{ chat.titulo || 'Sin título' }}</p>
+                    <p class="chat-card-meta">
+                      {{ chat.tipo_chat }} &bull; {{ chat.created_at | date:'dd/MM/yy HH:mm' }}
+                    </p>
+                  </div>
+                  <div class="chat-card-actions">
+                    <button class="chat-mini-btn" (click)="openChat(chat)">Abrir</button>
+                    <button class="chat-mini-btn" (click)="toggleFavorite(chat)"
+                            [title]="chat.favorito ? 'Quitar de favoritos' : 'Marcar como favorito'">
+                      {{ chat.favorito ? '★' : '☆' }}
+                    </button>
+                    <button class="chat-mini-btn" (click)="removeChat(chat.id)" title="Eliminar">🗑️</button>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      } @else {
+        <div class="chat-detail">
+          <div class="chat-detail-top">
+            <button class="btn secondary chat-back-btn" (click)="backToList()">← Volver</button>
+            <h4 class="chat-detail-title">{{ selectedChat()!.titulo || 'Chat' }}</h4>
+            <button class="chat-mini-btn" (click)="removeChat(selectedChat()!.id)" title="Eliminar">🗑️</button>
+          </div>
+          <div class="chat-detail-conversation">
+            @for (msg of chatMessages(selectedChat()!); track $index) {
+              <div class="chatd-row" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+                @if (msg.role === 'assistant') { <img src="assets/Rinko.png" alt="Rinko" class="chatd-avatar" /> }
+                <div class="chatd-bubble" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+                  @if (msg.role === 'assistant') { <span [innerHTML]="md(msg.content)"></span> }
+                  @else { {{ msg.content }} }
+                </div>
+                @if (msg.role === 'user') { <img [src]="prefsSvc.avatarUrl()" alt="Tú" class="chatd-avatar" /> }
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </aside>
+
+  <!-- ── ACTIVIDAD RECIENTE ───────────────────────────────── -->
+  <aside class="slide-panel" [class.open]="openPanel() === 'tiempo'" aria-label="Actividad reciente">
+    <header class="panel-header">
+      <h3>Actividad reciente</h3>
+      <button class="close-panel" (click)="closePanel()">✕</button>
+    </header>
+    <div class="panel-body mensajes-body">
+
+      @if (selectedRecentChat()) {
+        <!-- Detalle de chat reciente -->
+        <div class="chat-detail">
+          <div class="chat-detail-top">
+            <button class="btn secondary chat-back-btn" (click)="backFromRecent()">← Volver</button>
+            <h4 class="chat-detail-title">{{ selectedRecentChat()!.titulo || 'Chat' }}</h4>
+          </div>
+          <div class="chat-detail-conversation">
+            @for (msg of chatMessages(selectedRecentChat()!); track $index) {
+              <div class="chatd-row" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+                @if (msg.role === 'assistant') { <img src="assets/Rinko.png" alt="Rinko" class="chatd-avatar" /> }
+                <div class="chatd-bubble" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+                  @if (msg.role === 'assistant') { <span [innerHTML]="md(msg.content)"></span> }
+                  @else { {{ msg.content }} }
+                </div>
+                @if (msg.role === 'user') { <img [src]="prefsSvc.avatarUrl()" alt="Tú" class="chatd-avatar" /> }
+              </div>
+            }
+          </div>
+        </div>
+
+      } @else {
+        <!-- Timeline -->
+        @if (loadingHistory()) {
+          <p class="panel-hint">Cargando...</p>
+        } @else if (!historyChats().length) {
+          <p class="panel-hint">No hay actividad reciente.</p>
+        } @else {
+          <div class="timeline">
+            @for (chat of historyChats(); track chat.id) {
+              <div class="timeline-item" (click)="openRecentChat(chat)">
+                <div class="timeline-icon">{{ chat.tipo_chat === 'voz' ? '🎙️' : '💬' }}</div>
+                <div class="timeline-content">
+                  <p class="timeline-title">{{ chat.titulo || 'Sin título' }}</p>
+                  <p class="timeline-meta">{{ chat.created_at | date:'dd/MM/yy HH:mm' }}</p>
+                </div>
+                <span class="timeline-chevron">›</span>
+              </div>
+            }
+          </div>
+        }
+      }
+
+    </div>
+  </aside>
+
+  <!-- ── FAVORITOS ───────────────────────────────────────── -->
+  <aside class="slide-panel" [class.open]="openPanel() === 'favoritos'" aria-label="Favoritos">
+    <header class="panel-header">
+      <h3>Favoritos</h3>
+      <button class="close-panel" (click)="closePanel()">✕</button>
+    </header>
+    <div class="panel-body mensajes-body">
+
+      @if (selectedFavChat()) {
+        <!-- Detalle del favorito -->
+        <div class="chat-detail">
+          <div class="chat-detail-top">
+            <button class="btn secondary chat-back-btn" (click)="backFromFav()">← Volver</button>
+            <h4 class="chat-detail-title">{{ selectedFavChat()!.titulo || 'Chat' }}</h4>
+            <button class="chat-mini-btn fav-active" (click)="toggleFavorite(selectedFavChat()!)"
+                    title="Quitar de favoritos">★</button>
+          </div>
+          <div class="chat-detail-conversation">
+            @for (msg of chatMessages(selectedFavChat()!); track $index) {
+              <div class="chatd-row" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+                @if (msg.role === 'assistant') { <img src="assets/Rinko.png" alt="Rinko" class="chatd-avatar" /> }
+                <div class="chatd-bubble" [class.user]="msg.role === 'user'" [class.bot]="msg.role === 'assistant'">
+                  @if (msg.role === 'assistant') { <span [innerHTML]="md(msg.content)"></span> }
+                  @else { {{ msg.content }} }
+                </div>
+                @if (msg.role === 'user') { <img [src]="prefsSvc.avatarUrl()" alt="Tú" class="chatd-avatar" /> }
+              </div>
+            }
+          </div>
+        </div>
+
+      } @else {
+        <!-- Lista de favoritos -->
+        <div class="panel-actions">
+          <button class="btn secondary" (click)="loadFavorites()">Refrescar</button>
+        </div>
+        @if (loadingFavorites()) {
+          <p class="panel-hint">Cargando...</p>
+        } @else if (!favoriteChats().length) {
+          <p class="panel-hint">Aún no tienes favoritos.<br/>Marca un chat con ★ en Mensajes.</p>
+        } @else {
+          <div class="chats-list">
+            @for (chat of favoriteChats(); track chat.id) {
+              <div class="chat-card">
+                <div class="chat-card-top">
+                  <div>
+                    <p class="chat-card-title">{{ chat.titulo || 'Sin título' }}</p>
+                    <p class="chat-card-meta">{{ chat.tipo_chat }} &bull; {{ chat.created_at | date:'dd/MM/yy HH:mm' }}</p>
+                  </div>
+                  <div class="chat-card-actions">
+                    <button class="chat-mini-btn" (click)="openFavChat(chat)">Abrir</button>
+                    <button class="chat-mini-btn fav-active" (click)="toggleFavorite(chat)" title="Quitar de favoritos">★</button>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      }
+
+    </div>
+  </aside>
+
+  <!-- ── CONFIGURACIÓN ───────────────────────────────────── -->
+  <aside class="slide-panel" [class.open]="openPanel() === 'ajustes'" aria-label="Configuración">
+    <header class="panel-header">
+      <h3>Configuración</h3>
+      <button class="close-panel" (click)="closePanel()">✕</button>
+    </header>
+    <div class="panel-body settings-body">
+
+      <!-- Apariencia -->
+      <div class="settings-group">
+        <h4 class="settings-group-title">Apariencia</h4>
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-icon">🌙</span>
+            <span>Tema oscuro</span>
+          </div>
+          <button class="toggle-btn" [class.on]="prefsSvc.isDark()" (click)="toggleDark()"
+                  [attr.aria-pressed]="prefsSvc.isDark()">
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Idioma -->
+      <div class="settings-group">
+        <h4 class="settings-group-title">Idioma</h4>
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-icon">🌐</span>
+            <span>Idioma de la interfaz</span>
+          </div>
+          <select class="settings-select" [value]="prefsSvc.lang()"
+                  (change)="setLang($any($event.target).value)">
+            <option value="es">Español</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Notificaciones -->
+      <div class="settings-group">
+        <h4 class="settings-group-title">Notificaciones</h4>
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-icon">🔔</span>
+            <span>Notificaciones del chat</span>
+          </div>
+          <button class="toggle-btn" [class.on]="prefsSvc.prefs().notificationsEnabled"
+                  (click)="toggleNotifications()"
+                  [attr.aria-pressed]="prefsSvc.prefs().notificationsEnabled">
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Privacidad -->
+      <div class="settings-group">
+        <h4 class="settings-group-title">Privacidad</h4>
+        <div class="settings-row">
+          <div class="settings-row-label">
+            <span class="settings-row-icon">💾</span>
+            <span>Guardar historial automático</span>
+          </div>
+          <button class="toggle-btn" [class.on]="prefsSvc.prefs().autoSave"
+                  (click)="toggleAutoSave()"
+                  [attr.aria-pressed]="prefsSvc.prefs().autoSave">
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Acerca de -->
+      <div class="settings-group settings-about">
+        <p class="settings-about-name">RinkBot</p>
+        <p class="settings-about-meta">v1.0 &bull; Serinco HSEQ</p>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- ── PANELES PLACEHOLDER ─────────────────────────────── -->
+  @for (p of [
+    {id:'soporte',        label:'Soporte'},
+    {id:'notificaciones', label:'Notificaciones'},
+    {id:'reunion',        label:'Reunión'},
+    {id:'hseq',           label:'HSEQ'},
+    {id:'inicio',         label:'Inicio'}
+  ]; track p.id) {
+    <aside class="slide-panel" [class.open]="openPanel() === p.id" [attr.aria-label]="p.label">
+      <header class="panel-header">
+        <h3>{{ p.label }}</h3>
+        <button class="close-panel" (click)="closePanel()">✕</button>
+      </header>
+      <div class="panel-body">
+        <p class="panel-hint">🚧 Próximamente</p>
+      </div>
+    </aside>
+  }
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: Mi cuenta
+════════════════════════════════════════════════════════ -->
+@if (showAccount()) {
+  <div class="modal-backdrop open" (click)="showAccount.set(false)">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h3>Mi cuenta</h3>
+        <button class="modal-close" (click)="showAccount.set(false)">✕</button>
+      </header>
+      <div class="modal-body">
+
+        <!-- Avatar con upload -->
+        <div class="account-header">
+          <div class="avatar-upload-wrap" (click)="triggerAvatarInput()" title="Cambiar foto">
+            <img [src]="avatarPreview() || prefsSvc.avatarUrl()" alt="Avatar" class="account-avatar" />
+            <div class="avatar-upload-overlay">📷</div>
+          </div>
+          <div>
+            <p class="account-name">{{ user?.nombre ?? '—' }}</p>
+            <p class="account-sub">Toca la foto para cambiarla</p>
+          </div>
+        </div>
+
+        <!-- Preview actions -->
+        @if (avatarPreview()) {
+          <div class="avatar-preview-actions">
+            <button class="btn secondary" (click)="cancelAvatarChange()">Cancelar</button>
+            <button class="btn" (click)="saveAvatar()">Guardar foto</button>
+          </div>
+        }
+
+        <br />
+        <button class="btn secondary" style="width:100%" (click)="logout()">Cerrar sesión</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: Guardar chat
+════════════════════════════════════════════════════════ -->
+@if (showSaveModal()) {
+  <div class="modal-backdrop open" (click)="showSaveModal.set(false)">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h3>Guardar conversación</h3>
+        <button class="modal-close" (click)="showSaveModal.set(false)">✕</button>
+      </header>
+      <div class="modal-body">
+        <label class="save-label" for="saveTitle">Título</label>
+        <input id="saveTitle" class="save-input" type="text" [(ngModel)]="saveTitle"
+               placeholder="Ej: Consulta sobre procedimientos HSEQ"
+               (keydown.enter)="confirmSave()" />
+        <div class="save-actions">
+          <button class="btn secondary" (click)="showSaveModal.set(false)">Cancelar</button>
+          <button class="btn" (click)="confirmSave()" [disabled]="chatSvc.isLoading()">Guardar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+}

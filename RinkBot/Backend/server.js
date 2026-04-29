@@ -13,13 +13,14 @@ import { fileURLToPath } from "url";
 import logger from "./logger.js";
 import { login } from "./auth.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { adminOnly } from "./middleware/adminOnly.js";
 import { ping as dbPing } from "./db.js";
 import { retrieveContext } from "./rag.js";
 import { searchWeb } from "./webSearch.js";
-import { syncDriveBatch, resetDriveSyncState } from "./driveIndexer.js";
+import { syncDriveBatch, resetDriveSyncState, getDriveSyncState, reindexPendingFiles } from "./driveIndexer.js";
 import { createChat, listChats, getChat, setChatFavorite, deleteChat } from "./chatStore.js";
-import { getDriveSyncState } from "./driveIndexer.js";
 import { getOpenAIClient } from "./openaiClient.js";
+import multer from "multer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,7 +70,7 @@ app.use(express.json({ limit: "2mb" }));
 // En producción Express sirve el frontend desde el mismo proceso.
 // En desarrollo local puedes seguir usando `npx serve Frontend` en puerto 8080.
 // --------------------
-app.use(express.static(path.join(__dirname, "../Frontend")));
+app.use(express.static(path.join(__dirname, "../rinkbot-frontend/dist/browser")));
 
 // --------------------
 // RATE LIMITING
@@ -93,9 +94,39 @@ const apiLimiter = rateLimit({
 // Aplicar rate limit general a /api/*
 app.use("/api/", apiLimiter);
 
+// Log de requests para diagnóstico
+app.use("/api/", (req, _res, next) => {
+  logger.info({ method: req.method, path: req.path, auth: !!req.headers.authorization }, "api request");
+  next();
+});
+
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const SYSTEM_FOLDER_ID = process.env.SYSTEM_FOLDER_ID;
 const MAX_MESSAGE_CHARS = Number(process.env.MAX_MESSAGE_CHARS || 4000);
+const MAX_IMAGE_BYTES = parseInt(process.env.MAX_IMAGE_BYTES || "10485760");
+
+// --------------------
+// MULTER — image uploads (memory storage, no disk writes)
+// --------------------
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+const _multerUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_IMAGE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) cb(null, true);
+    else cb(Object.assign(new Error("Tipo de imagen no permitido"), { status: 400 }));
+  },
+});
+
+function chatUploadMiddleware(req, res, next) {
+  if (req.is("application/json")) return next();
+  _multerUpload.single("imagen")(req, res, (err) => {
+    if (!err) return next();
+    const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    return res.status(status).json({ ok: false, error: err.message });
+  });
+}
 
 // --------------------
 // HEALTH CHECK (público — útil para load balancers y monitoreo)
@@ -194,7 +225,7 @@ function compactStateForApi(state) {
   };
 }
 
-app.post("/api/drive/sync", async (req, res) => {
+app.post("/api/drive/sync", adminOnly, async (req, res) => {
   try {
     const folderId = req.body?.folderId || SYSTEM_FOLDER_ID;
     const batchFiles = Number(req.body?.batchFiles || process.env.DRIVE_SYNC_BATCH_FILES || 10);
@@ -234,7 +265,7 @@ app.post("/api/drive/sync", async (req, res) => {
   }
 });
 
-app.post("/api/drive/sync/reset", async (req, res) => {
+app.post("/api/drive/sync/reset", adminOnly, async (req, res) => {
   try {
     const folderId = req.body?.folderId || SYSTEM_FOLDER_ID;
     const out = await resetDriveSyncState(folderId);
@@ -245,7 +276,30 @@ app.post("/api/drive/sync/reset", async (req, res) => {
   }
 });
 
-app.get("/api/drive/sync/state", async (req, res) => {
+app.post("/api/drive/reindex", adminOnly, async (req, res) => {
+  try {
+    const folderId = req.body?.folderId || SYSTEM_FOLDER_ID;
+    const batchFiles = Number(req.body?.batchFiles || process.env.DRIVE_SYNC_BATCH_FILES || 10);
+    const includeErrors = req.body?.includeErrors === true;
+    res.json({ ok: true, started: true, message: "Reindex started" });
+    (async () => {
+      let total = { indexed: 0, skipped: 0, errors: 0 };
+      while (true) {
+        const r = await reindexPendingFiles({ folderId, batchFiles, includeErrors });
+        total.indexed += r.indexed;
+        total.skipped += r.skipped;
+        total.errors += r.errors;
+        if (r.pendingRemaining === 0) break;
+      }
+      logger.info({ ...total }, "reindex pending completed");
+    })().catch((e) => logger.error({ err: e?.message }, "reindex pending error"));
+  } catch (e) {
+    logger.error({ err: e?.message }, "reindex pending error");
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get("/api/drive/sync/state", adminOnly, async (req, res) => {
   try {
     const folderId = req.query?.folderId || SYSTEM_FOLDER_ID;
     const st = await getDriveSyncState(folderId);
@@ -273,7 +327,7 @@ app.get("/api/drive/sync/state", async (req, res) => {
 // --------------------
 // CHAT (RAG + OpenAI) — protegido, usa req.user.id_persona
 // --------------------
-app.post("/api/chat", async (req, res) => {
+app.post("/api/chat", chatUploadMiddleware, async (req, res) => {
   try {
     const id_persona = req.user.id_persona; // <-- del JWT, no del body
     const { message, tipo_chat = "texto", titulo = null, save = false } = req.body || {};
@@ -348,7 +402,21 @@ app.post("/api/chat", async (req, res) => {
           "- Si no encuentras información relevante en ninguna fuente, dilo honestamente.\n" +
           "- Cita la fuente cuando sea posible (nombre del documento o URL).",
       },
-      { role: "user", content: msg },
+      {
+        role: "user",
+        content: req.file
+          ? [
+              { type: "text", text: msg },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`,
+                  detail: "auto",
+                },
+              },
+            ]
+          : msg,
+      },
     ];
 
     const r = await getOpenAIClient().chat.completions.create({
@@ -405,6 +473,7 @@ app.post("/api/chat", async (req, res) => {
     return res.json({
       ok: true,
       reply: finalReply,
+      response: finalReply,   // alias para Angular ChatService
       sources,
       webSources: webResults,
       bestSourceSimilarity: sources?.[0]?.similarity ?? null,
@@ -423,7 +492,7 @@ app.post("/api/chat", async (req, res) => {
 app.get("/api/chats", async (req, res) => {
   try {
     const id_persona = req.user.id_persona;
-    const limit = Number(req.query?.limit || 20);
+    const limit = Math.min(Number(req.query?.limit || 20), 100);
 
     const chats = await listChats({ id_persona, limit });
     return res.json({ ok: true, chats });
@@ -522,6 +591,11 @@ app.delete("/api/chats/:id_chat", async (req, res) => {
   }
 });
 
+// SPA fallback — todas las rutas no-API sirven el index.html de Angular
+app.get("/{*path}", (req, res) => {
+  res.sendFile(path.join(__dirname, "../rinkbot-frontend/dist/browser/index.html"));
+});
+
 const PORT = Number(process.env.PORT || 3000);
 
 // --------------------
@@ -532,6 +606,8 @@ const CERT_KEY  = path.join(__dirname, "certs", "server.key");
 const CERT_CRT  = path.join(__dirname, "certs", "server.crt");
 const certsExist = process.env.HTTPS_ENABLED !== "false" && fs.existsSync(CERT_KEY) && fs.existsSync(CERT_CRT);
 
+logger.info({ maxImageBytes: MAX_IMAGE_BYTES }, "image upload configured");
+
 const startInfo = {
   port: PORT,
   protocol: certsExist ? "https" : "http",
@@ -541,16 +617,35 @@ const startInfo = {
   env: process.env.NODE_ENV || "development",
 };
 
+let server;
+
 if (certsExist) {
   const sslOptions = {
     key:  fs.readFileSync(CERT_KEY),
     cert: fs.readFileSync(CERT_CRT),
   };
-  https.createServer(sslOptions, app).listen(PORT, "0.0.0.0", () => {
+  server = https.createServer(sslOptions, app).listen(PORT, "0.0.0.0", () => {
     logger.info(startInfo, "server started (HTTPS)");
   });
 } else {
-  app.listen(PORT, "0.0.0.0", () => {
+  server = app.listen(PORT, "0.0.0.0", () => {
     logger.info(startInfo, "server started (HTTP — certs not found, mic disabled on LAN)");
   });
 }
+
+// Graceful shutdown — Railway (y Docker) envían SIGTERM antes de detener el contenedor.
+// Dejamos que las peticiones en vuelo terminen (máx 10s) antes de cerrar.
+function shutdown(signal) {
+  logger.info({ signal }, "shutdown signal received");
+  server.close(() => {
+    logger.info("server closed — exiting");
+    process.exit(0);
+  });
+  setTimeout(() => {
+    logger.warn("forced exit after timeout");
+    process.exit(1);
+  }, 10_000);
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT",  () => shutdown("SIGINT"));
