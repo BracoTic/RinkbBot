@@ -6,7 +6,8 @@ dotenv.config();
 
 const EMB_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 const TOP_K = Number(process.env.RAG_TOP_K || 10);
-const MIN_SIM = Number(process.env.RAG_MIN_SIMILARITY || 0.25);
+const MIN_SIM             = parseFloat(process.env.RAG_MIN_SIMILARITY  || "0.35");
+const RAG_HIGH_CONFIDENCE = parseFloat(process.env.RAG_HIGH_CONFIDENCE || "0.45");
 
 // ---- Embedding cache ----
 // Previene llamadas duplicadas a la API para queries repetidas.

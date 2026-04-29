@@ -21,6 +21,7 @@ import { syncDriveBatch, resetDriveSyncState, getDriveSyncState, reindexPendingF
 import { createChat, listChats, getChat, setChatFavorite, deleteChat } from "./chatStore.js";
 import { getOpenAIClient } from "./openaiClient.js";
 import multer from "multer";
+import { getHistory, saveHistory } from "./sessionStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,6 +127,36 @@ function chatUploadMiddleware(req, res, next) {
     const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
     return res.status(status).json({ ok: false, error: err.message });
   });
+}
+
+// --------------------
+// INTENT CLASSIFICATION + WEB SEARCH GATE
+// --------------------
+
+function classifyIntent(message) {
+  const trimmed = (message || "").trim();
+
+  const isGreeting =
+    trimmed.length < 20 &&
+    /^(hola|buenas|hey|buen día|buenos días|buenas tardes|buenas noches|qué tal|cómo estás|holi)\b/i.test(trimmed) &&
+    !trimmed.includes("?");
+
+  if (isGreeting) return "greeting";
+
+  if (!!SYSTEM_FOLDER_ID && trimmed.length >= 15) return "internal";
+
+  return "general";
+}
+
+function shouldRunWebSearch(message, ragSimilarity) {
+  const WEB_SEARCH_ENABLED = process.env.WEB_SEARCH_ENABLED === "true";
+  const SERPAPI_KEY = process.env.SERPAPI_KEY;
+  const HIGH_CONFIDENCE = parseFloat(process.env.RAG_HIGH_CONFIDENCE || "0.45");
+
+  if (!WEB_SEARCH_ENABLED || !SERPAPI_KEY) return false;
+  if (ragSimilarity !== null && ragSimilarity >= HIGH_CONFIDENCE) return false;
+
+  return /resolución|decreto|norma|vigente|actualiz|precio|hoy|actualmente|reciente|última versión|cuánto cuesta|cuándo fue|fecha/i.test(message);
 }
 
 // --------------------
@@ -330,7 +361,12 @@ app.get("/api/drive/sync/state", adminOnly, async (req, res) => {
 app.post("/api/chat", chatUploadMiddleware, async (req, res) => {
   try {
     const id_persona = req.user.id_persona; // <-- del JWT, no del body
-    const { message, tipo_chat = "texto", titulo = null, save = false } = req.body || {};
+    let { message, tipo_chat = "texto", titulo = null, save = false } = req.body || {};
+
+    // D3: allow image-only requests (no text required when file is present)
+    if (req.file && (!message || message.trim() === "")) {
+      message = "Describe esta imagen en detalle.";
+    }
 
     if (!message || typeof message !== "string") {
       return res.status(400).json({ ok: false, error: "Falta 'message' (string) en el body" });
@@ -343,88 +379,102 @@ app.post("/api/chat", chatUploadMiddleware, async (req, res) => {
       });
     }
 
-    // -------- RAG gating --------
-    let context = "";
-    let sources = [];
-    let bestSimilarity = null;
+    // D4: load conversation history
+    const rawTurns = await getHistory(id_persona);
+    const historyMessages = rawTurns.map(t => ({ role: t.role, content: t.content }));
 
-    const DISABLE_FOR_SMALL = (process.env.RAG_DISABLE_FOR_SMALL_QUERIES || "true") === "true";
-    const MIN_QUERY_CHARS = Number(process.env.RAG_MIN_QUERY_CHARS || 25);
-
+    // D5: intent classification + sequential RAG + web search
     const BLOCKLIST_REGEX =
       process.env.RAG_BLOCKLIST_REGEX || "contrasen|password|clave|secret|api[_-]?key|token";
 
     const msg = (message || "").trim();
-    const looksCasual =
-      msg.length < MIN_QUERY_CHARS ||
-      /^(hola|buenas|hey|gracias|ok|listo|dale|perfecto|bien|qué tal)\b/i.test(msg);
+    const intent = classifyIntent(msg);
+    const runRag = intent !== "greeting" && !!SYSTEM_FOLDER_ID;
 
-    const shouldUseRag = !!SYSTEM_FOLDER_ID && !(DISABLE_FOR_SMALL && looksCasual);
+    let context = "";
+    let sources = [];
+    let bestSimilarity = null;
 
-    if (shouldUseRag) {
-      const out = await retrieveContext({
+    if (runRag) {
+      const ragOut = await retrieveContext({
         folderId: SYSTEM_FOLDER_ID,
         query: msg,
         blocklistRegex: BLOCKLIST_REGEX,
       });
-
-      context = out.context;
-      sources = out.sources;
-      bestSimilarity = out.bestSimilarity;
+      context = ragOut.context;
+      sources = ragOut.sources;
+      bestSimilarity = ragOut.bestSimilarity;
     }
 
-    // -------- Web search fallback --------
     let webResults = [];
-    const WEB_SEARCH_ENABLED = (process.env.WEB_SEARCH_ENABLED || "false") === "true";
-
-    if (WEB_SEARCH_ENABLED && !context) {
+    if (shouldRunWebSearch(msg, bestSimilarity)) {
       webResults = await searchWeb(msg);
     }
 
-    // -------- Prompt --------
-    const driveSection = context
-      ? `[CONTEXTO INTERNO - Google Drive]\n${context}`
-      : "[CONTEXTO INTERNO - Google Drive]\nNo se encontró información relevante en los documentos.";
+    // D6: dynamic system prompt — no empty placeholder sections
+    let systemPrompt =
+      "Eres RinkBot, asistente corporativo de SERINCO. " +
+      "Responde siempre en español. Sé preciso y cita la fuente cuando tengas contexto.";
 
-    const webSection = webResults.length
-      ? `[CONTEXTO EXTERNO - Búsqueda Web]\n` +
-        webResults.map((r) => `- ${r.title}\n  ${r.snippet}\n  Fuente: ${r.url}`).join("\n\n")
-      : "[CONTEXTO EXTERNO - Búsqueda Web]\nNo se realizó búsqueda web o no hubo resultados.";
+    if (intent !== "greeting") {
+      if (context) {
+        systemPrompt += `\n\n[CONTEXTO INTERNO — Google Drive]\n${context}`;
+      }
+
+      if (webResults.length) {
+        const webFormatted = webResults
+          .map((r) => `- ${r.title}\n  ${r.snippet}\n  Fuente: ${r.url}`)
+          .join("\n\n");
+        systemPrompt += `\n\n[CONTEXTO EXTERNO — Búsqueda Web]\n${webFormatted}`;
+      }
+
+      if (intent === "internal" && !context && !webResults.length) {
+        systemPrompt +=
+          "\n\nNo encontré información relevante en los documentos internos. " +
+          "Responde con tu conocimiento general e indica que no hay documentos disponibles.";
+      }
+
+      systemPrompt +=
+        "\n\nReglas: responde en español. Si hay conflicto entre fuentes, " +
+        "prioriza Drive sobre Web. Cita la fuente cuando sea posible.";
+    }
+
+    const userContent = req.file
+      ? [
+          { type: "text", text: msg },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`,
+              detail: "auto",
+            },
+          },
+        ]
+      : msg;
 
     const messages = [
-      {
-        role: "system",
-        content:
-          "Eres RinkBot. Responde la pregunta del usuario usando el siguiente contexto.\n\n" +
-          driveSection + "\n\n" + webSection + "\n\n" +
-          "Reglas:\n" +
-          "- Si hay conflicto entre fuentes, prioriza la información web (más actualizada).\n" +
-          "- Si no encuentras información relevante en ninguna fuente, dilo honestamente.\n" +
-          "- Cita la fuente cuando sea posible (nombre del documento o URL).",
-      },
-      {
-        role: "user",
-        content: req.file
-          ? [
-              { type: "text", text: msg },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`,
-                  detail: "auto",
-                },
-              },
-            ]
-          : msg,
-      },
+      { role: "system", content: systemPrompt },
+      ...historyMessages,
+      { role: "user", content: userContent },
     ];
 
+    // D7: configurable OpenAI parameters
     const r = await getOpenAIClient().chat.completions.create({
-      model: MODEL,
+      model:       MODEL,
       messages,
+      temperature: parseFloat(process.env.OPENAI_TEMPERATURE || "0.3"),
+      max_tokens:  parseInt(process.env.OPENAI_MAX_TOKENS   || "1500"),
     });
 
     const reply = r.choices?.[0]?.message?.content || "";
+
+    // D8: update conversation history (blocking — data must persist before response)
+    const updatedTurns = [
+      ...rawTurns,
+      { role: "user",      content: msg,   ts: Date.now(), hadImage: !!req.file },
+      { role: "assistant", content: reply, ts: Date.now() },
+    ];
+    await saveHistory(id_persona, updatedTurns);
 
     // -------- Guardar chat --------
     let saved = null;
@@ -481,8 +531,9 @@ app.post("/api/chat", chatUploadMiddleware, async (req, res) => {
       saved,
     });
   } catch (e) {
-    logger.error({ err: e?.message }, "chat error");
-    return res.status(500).json({ ok: false, error: "Error al conectar con OpenAI" });
+    logger.error({ err: e?.message, status: e?.status, code: e?.code, type: e?.type }, "chat error");
+    const detail = e?.status ? `OpenAI error ${e.status}: ${e?.message}` : (e?.message || "Error desconocido");
+    return res.status(500).json({ ok: false, error: "Error al conectar con OpenAI", detail });
   }
 });
 

@@ -22,7 +22,7 @@ export async function listChats({ id_persona, limit = 20 }) {
   const r = await pool.query(
     `select id_chat, tipo_chat, titulo, modelo_llm, favorito, created_at
      from public.chat
-     where id_persona = $1
+     where id_persona = $1 AND tipo_chat != 'session'
      order by created_at desc
      limit $2`,
     [id_persona, limit]
