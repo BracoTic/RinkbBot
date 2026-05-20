@@ -174,9 +174,9 @@ app.get("/health", async (req, res) => {
   } catch (_) {}
 
   const mem = process.memoryUsage();
-  const status = dbOk ? "ok" : "error";
+  const status = dbOk ? "ok" : "degraded";
 
-  res.status(dbOk ? 200 : 503).json({
+  res.status(200).json({
     status,
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
