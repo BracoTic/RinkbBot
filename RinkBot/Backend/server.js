@@ -30,6 +30,10 @@ dotenv.config();
 
 const app = express();
 
+// Railway (y cualquier reverse proxy) inyecta X-Forwarded-For.
+// Sin esto, express-rate-limit lanza ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set("trust proxy", 1);
+
 // --------------------
 // SEGURIDAD: Helmet + Compression
 // --------------------
