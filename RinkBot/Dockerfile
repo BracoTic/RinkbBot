@@ -16,7 +16,7 @@ FROM node:22-alpine AS builder
 WORKDIR /build
 
 COPY rinkbot-frontend/package.json rinkbot-frontend/package-lock.json ./
-RUN npm ci
+RUN npm install
 
 COPY rinkbot-frontend/ ./
 RUN npm run build -- --configuration production
