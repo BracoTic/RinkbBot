@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════
 :host {
   // Layout
-  --rail-w:        64px;
+  --rail-w:        72px;
   --bottombar-h:   60px;   // altura del rail inferior en móvil
   --panel-w:       320px;
   // Superficies
@@ -1009,25 +1009,28 @@
     height:          calc(var(--bottombar-h) + env(safe-area-inset-bottom, 0px));
     flex-direction:  row;
     align-items:     center;
-    justify-content: space-around;
-    padding:         0 8px env(safe-area-inset-bottom, 0px);
+    justify-content: space-evenly;
+    padding:         0 0 env(safe-area-inset-bottom, 0px);
+    padding-left:    max(16px, env(safe-area-inset-left, 0px));
+    padding-right:   max(16px, env(safe-area-inset-right, 0px));
     border-top:      1px solid var(--border);
     border-right:    none;
     border-bottom:   none;
     border-left:     none;
     z-index:         100;
     // sin hover-expand en tablet/mobile
-    &:hover { width: 100%; align-items: center; padding: 0 8px env(safe-area-inset-bottom, 0px); }
+    &:hover { width: 100%; align-items: center; padding: 0 0 env(safe-area-inset-bottom, 0px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   }
 
   .brand-top { padding: 0; width: auto; }
   .brand-logo { width: 34px; height: 34px; }
 
-  .user-info  { flex-direction: row; padding: 0; gap: 0; }
+  .user-info  { flex-direction: row; padding: 0; gap: 0; width: auto; flex-shrink: 0; }
   .user-name  { display: none; }
 
-  .left-nav   { flex-direction: row; flex: none; gap: 0; }
+  .left-nav    { flex-direction: row; flex: none; gap: 0; width: auto; }
   .left-bottom { margin-top: 0; width: auto; }
+  .logout-label { display: none; }
 
   .icon-btn {
     width:  48px;
@@ -1124,23 +1127,26 @@
     height:          calc(var(--bottombar-h) + env(safe-area-inset-bottom, 0px));
     flex-direction:  row;
     align-items:     center;
-    justify-content: space-around;
-    padding:         0 4px env(safe-area-inset-bottom, 0px);
+    justify-content: space-evenly;
+    padding:         0 0 env(safe-area-inset-bottom, 0px);
+    padding-left:    max(16px, env(safe-area-inset-left, 0px));
+    padding-right:   max(16px, env(safe-area-inset-right, 0px));
     border-top:      1px solid var(--border);
     border-right:    none;
     border-bottom:   none;
     border-left:     none;
     z-index:         100;
-    &:hover { width: 100%; align-items: center; padding: 0 4px env(safe-area-inset-bottom, 0px); }
+    &:hover { width: 100%; align-items: center; padding: 0 0 env(safe-area-inset-bottom, 0px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   }
 
   .brand-top  { padding: 0; width: auto; }
   .brand-logo { width: 30px; height: 30px; }
   .avatar     { width: 30px; height: 30px; }
-  .user-info  { flex-direction: row; padding: 0; gap: 0; }
+  .user-info  { flex-direction: row; padding: 0; gap: 0; width: auto; flex-shrink: 0; }
   .user-name  { display: none; }
-  .left-nav   { flex-direction: row; flex: none; gap: 0; }
+  .left-nav    { flex-direction: row; flex: none; gap: 0; width: auto; }
   .left-bottom { margin-top: 0; width: auto; }
+  .logout-label { display: none; }
 
   .icon-btn {
     width:     42px;
@@ -1297,26 +1303,4 @@
   object-fit: contain;
   border-radius: 10px;
   margin-bottom: 6px;
-}
-
-// ── Upload progress bar ───────────────────────────────────
-.upload-progress-bar {
-  margin: 0 12px 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.upload-progress-fill {
-  height: 4px;
-  min-width: 4px;
-  background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.2s ease;
-}
-
-.upload-progress-label {
-  font-size: 11px;
-  color: var(--text-primary);
-  opacity: 0.6;
 }

@@ -1,5 +1,7 @@
 # Dependencias — se instalan dentro de la imagen
 Backend/node_modules/
+rinkbot-frontend/node_modules/
+rinkbot-frontend/dist/
 
 # Secretos — NUNCA copiar al contenedor
 Backend/.env

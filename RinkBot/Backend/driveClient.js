@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { google } from "googleapis";
 
@@ -6,13 +7,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const SCOPES = ["https://www.googleapis.com/auth/drive.readonly"];
-const KEYFILE_PATH = path.join(__dirname, "config", "service-account.json");
 
 export function createDriveClient() {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: KEYFILE_PATH,
-    scopes: SCOPES,
-  });
+  let auth;
+
+  // Prioridad 1: variable de entorno (Railway / cualquier cloud)
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    auth = new google.auth.GoogleAuth({ credentials, scopes: SCOPES });
+  } else {
+    // Prioridad 2: archivo local (desarrollo)
+    const keyFile = path.join(__dirname, "config", "service-account.json");
+    if (!fs.existsSync(keyFile)) {
+      throw new Error(
+        "Google Drive: falta GOOGLE_SERVICE_ACCOUNT_JSON (env) o config/service-account.json (local)"
+      );
+    }
+    auth = new google.auth.GoogleAuth({ keyFile, scopes: SCOPES });
+  }
+
   return google.drive({ version: "v3", auth });
 }
 

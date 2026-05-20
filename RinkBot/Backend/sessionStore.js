@@ -56,24 +56,13 @@ export async function getHistory(userId, db = pool) {
  * turns: [{ role, content, ts, hadImage? }]
  */
 export async function saveHistory(userId, turns, db = pool) {
-  const r = await db.query(
-    `SELECT id_chat FROM public.chat
-     WHERE id_persona = $1 AND tipo_chat = $2
-     ORDER BY created_at DESC LIMIT 1`,
-    [userId, SESSION_TIPO]
+  await db.query(
+    `INSERT INTO public.chat (id_persona, tipo_chat, titulo, chat_json, favorito)
+     VALUES ($1, $2, $3, $4::jsonb, false)
+     ON CONFLICT (id_persona) WHERE tipo_chat = 'session'
+     DO UPDATE SET
+       chat_json  = EXCLUDED.chat_json,
+       created_at = NOW()`,
+    [userId, SESSION_TIPO, SESSION_TITULO, JSON.stringify(turns)]
   );
-
-  if (r.rows.length) {
-    await db.query(
-      `UPDATE public.chat SET chat_json = $1::jsonb
-       WHERE id_chat = $2`,
-      [JSON.stringify(turns), r.rows[0].id_chat]
-    );
-  } else {
-    await db.query(
-      `INSERT INTO public.chat (id_persona, tipo_chat, titulo, chat_json, favorito)
-       VALUES ($1, $2, $3, $4::jsonb, false)`,
-      [userId, SESSION_TIPO, SESSION_TITULO, JSON.stringify(turns)]
-    );
-  }
 }

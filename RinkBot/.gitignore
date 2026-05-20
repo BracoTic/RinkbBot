@@ -39,3 +39,10 @@ Backend/certs/
 
 # Claude Code local settings
 .claude/
+
+# MCP server config (contains API tokens)
+.mcp.json
+
+# Runtime error logs
+*.err
+Backend/server.err

@@ -1,19 +1,8 @@
-# Dependencies
-Backend/node_modules/
+# MCP server config (contains API tokens)
+.mcp.json
 
-# Environment variables (API keys - never commit)
-Backend/.env
-.env
+# Claude Code local settings
+.claude/
 
-# Logs
-*.log
-npm-debug.log*
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Editor
-.vscode/
-*.suo
-*.user
+# Zip backups
+*.zip

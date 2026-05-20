@@ -11,7 +11,7 @@ export async function login(usuario, password) {
   if (!usuario || !password) return null;
 
   const sql = `
-    SELECT id_persona, usuario, correo, avatar_url
+    SELECT id_persona, usuario, correo, avatar_url, rol
     FROM public.persona
     WHERE usuario = $1
       AND password_hash = crypt($2, password_hash)
@@ -38,6 +38,7 @@ export async function login(usuario, password) {
   const token = generateToken({
     id_persona: user.id_persona,
     usuario: user.usuario,
+    rol: user.rol ?? "usuario",
   });
 
   return {
@@ -46,6 +47,7 @@ export async function login(usuario, password) {
       usuario: user.usuario,
       correo: user.correo,
       avatar_url: user.avatar_url,
+      rol: user.rol ?? "usuario",
     },
     token,
   };

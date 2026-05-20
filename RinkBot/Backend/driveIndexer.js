@@ -1,7 +1,11 @@
 import dotenv from "dotenv";
+import { createRequire } from "module";
 import pool from "./db.js";
+import logger from "./logger.js";
 import { createDriveClient, listFolder, downloadBuffer, exportBuffer } from "./driveClient.js";
 import { getOpenAIClient } from "./openaiClient.js";
+
+const _require = createRequire(import.meta.url);
 
 dotenv.config();
 
@@ -47,16 +51,8 @@ async function embedTexts(texts) {
 }
 
 // ---- PDF ----
-let pdfParseFn = null;
-async function getPdfParse() {
-  if (!pdfParseFn) {
-    const mod = await import("pdf-parse");
-    pdfParseFn = mod.default || mod;
-  }
-  return pdfParseFn;
-}
+const pdfParse = _require("pdf-parse");
 async function extractTextFromPdfBuffer(buffer) {
-  const pdfParse = await getPdfParse();
   const data = await pdfParse(buffer);
   return (data?.text || "").trim();
 }
@@ -320,6 +316,22 @@ export async function syncDriveBatch({
 } = {}) {
   if (!folderId) throw new Error("SYSTEM_FOLDER_ID no configurado");
 
+  // Recuperar archivos zombie: más de 30 min en 'processing' por crash anterior
+  const recovered = await pool.query(
+    `UPDATE public.drive_files
+     SET status = 'pending',
+         error_message = 'Recuperado automáticamente: proceso previo interrumpido'
+     WHERE status = 'processing'
+       AND updated_at < NOW() - INTERVAL '30 minutes'
+     RETURNING drive_file_id, name`
+  );
+  if (recovered.rowCount > 0) {
+    logger.warn(
+      { count: recovered.rowCount, files: recovered.rows.map(r => r.name) },
+      "Archivos zombie en processing recuperados a pending"
+    );
+  }
+
   const drive = createDriveClient();
   const state = await getOrInitState(folderId);
 
@@ -537,5 +549,121 @@ export async function syncDriveBatch({
     queueRemaining: state.queue?.length || 0,
     state,
     result: { processed, indexed, skipped, errors, unchanged },
+  };
+}
+
+// Indexes files already known in drive_files (status='pending') without scanning the folder.
+// Works for files shared as "anyone with the link" since the Drive API can access them by ID.
+export async function reindexPendingFiles({
+  folderId = SYSTEM_FOLDER_ID,
+  batchFiles = DRIVE_SYNC_BATCH_FILES,
+  includeErrors = false,
+} = {}) {
+  if (!folderId) throw new Error("SYSTEM_FOLDER_ID no configurado");
+
+  const drive = createDriveClient();
+
+  const statusFilter = includeErrors ? "status IN ('pending','error')" : "status = 'pending'";
+  const { rows: pending } = await pool.query(
+    `SELECT drive_file_id, name, mime_type, web_view_link, modified_time, size_bytes
+     FROM public.drive_files
+     WHERE folder_id = $1 AND ${statusFilter}
+     ORDER BY updated_at ASC
+     LIMIT $2`,
+    [folderId, batchFiles]
+  );
+
+  let indexed = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  for (const row of pending) {
+    const file = {
+      id: row.drive_file_id,
+      name: row.name,
+      mimeType: row.mime_type,
+      webViewLink: row.web_view_link,
+      modifiedTime: row.modified_time,
+    };
+
+    try {
+      await pool.query(
+        `UPDATE public.drive_files SET status='processing', error_message=null, updated_at=now()
+         WHERE folder_id=$1 AND drive_file_id=$2`,
+        [folderId, file.id]
+      );
+
+      const text = await extractTextFromDriveFile(drive, file);
+      const trimmed = (text || "").trim();
+
+      if (!trimmed) {
+        skipped += 1;
+        await pool.query(
+          `UPDATE public.drive_files SET status='skipped', error_message='Tipo no soportado o texto vacío', updated_at=now()
+           WHERE folder_id=$1 AND drive_file_id=$2`,
+          [folderId, file.id]
+        );
+        continue;
+      }
+
+      const chunks = chunkText(trimmed);
+      if (!chunks.length) {
+        skipped += 1;
+        await pool.query(
+          `UPDATE public.drive_files SET status='skipped', error_message='Texto vacío tras chunking', updated_at=now()
+           WHERE folder_id=$1 AND drive_file_id=$2`,
+          [folderId, file.id]
+        );
+        continue;
+      }
+
+      const embeddings = await embedTexts(chunks);
+      const meta = { fileName: file.name, mimeType: file.mimeType, modifiedTime: file.modifiedTime, webViewLink: file.webViewLink };
+
+      const db = await pool.connect();
+      try {
+        await db.query("begin");
+        await db.query(
+          `DELETE FROM public.drive_chunks WHERE folder_id=$1 AND drive_file_id=$2`,
+          [folderId, file.id]
+        );
+        const { sql, params } = buildBulkInsertChunks({ folderId, driveFileId: file.id, chunks, embeddings, meta });
+        await db.query(sql, params);
+        await db.query(
+          `UPDATE public.drive_files SET status='indexed', error_message=null, updated_at=now()
+           WHERE folder_id=$1 AND drive_file_id=$2`,
+          [folderId, file.id]
+        );
+        await db.query("commit");
+      } catch (txErr) {
+        await db.query("rollback");
+        throw txErr;
+      } finally {
+        db.release();
+      }
+
+      indexed += 1;
+    } catch (e) {
+      errors += 1;
+      await pool.query(
+        `UPDATE public.drive_files SET status='error', error_message=$3, updated_at=now()
+         WHERE folder_id=$1 AND drive_file_id=$2`,
+        [folderId, file.id, e.message]
+      );
+    }
+  }
+
+  const { rows: remaining } = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM public.drive_files WHERE folder_id=$1 AND ${statusFilter}`,
+    [folderId]
+  );
+
+  return {
+    ok: true,
+    processed: pending.length,
+    indexed,
+    skipped,
+    errors,
+    pendingRemaining: Number(remaining[0]?.cnt || 0),
   };
 }

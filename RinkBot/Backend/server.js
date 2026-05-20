@@ -101,7 +101,7 @@ app.use("/api/", (req, _res, next) => {
   next();
 });
 
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const MODEL = process.env.OPENAI_MODEL || "gpt-5-nano";
 const SYSTEM_FOLDER_ID = process.env.SYSTEM_FOLDER_ID;
 const MAX_MESSAGE_CHARS = Number(process.env.MAX_MESSAGE_CHARS || 4000);
 const MAX_IMAGE_BYTES = parseInt(process.env.MAX_IMAGE_BYTES || "10485760");
@@ -361,6 +361,8 @@ app.get("/api/drive/sync/state", adminOnly, async (req, res) => {
 app.post("/api/chat", chatUploadMiddleware, async (req, res) => {
   try {
     const id_persona = req.user.id_persona; // <-- del JWT, no del body
+    // TEMP DIAG
+    logger.info({ contentType: req.headers["content-type"], hasFile: !!req.file, bodyKeys: Object.keys(req.body || {}) }, "chat request received");
     let { message, tipo_chat = "texto", titulo = null, save = false } = req.body || {};
 
     // D3: allow image-only requests (no text required when file is present)
@@ -407,7 +409,8 @@ app.post("/api/chat", chatUploadMiddleware, async (req, res) => {
     }
 
     let webResults = [];
-    if (shouldRunWebSearch(msg, bestSimilarity)) {
+    const useWeb = shouldRunWebSearch(msg, bestSimilarity);
+    if (useWeb) {
       webResults = await searchWeb(msg);
     }
 
@@ -452,20 +455,33 @@ app.post("/api/chat", chatUploadMiddleware, async (req, res) => {
         ]
       : msg;
 
+    // When the user sends an image, override the system prompt with a vision-focused one
+    // and drop conversation history to prevent contamination from previous text-only turns.
+    const visionSystemPrompt =
+      "Eres RinkBot, asistente corporativo de SERINCO con capacidad de análisis de imágenes. " +
+      "El usuario ha adjuntado una imagen. Analiza y describe detalladamente lo que ves en ella. " +
+      "Responde siempre en español.";
+
+    const finalSystemPrompt = req.file ? visionSystemPrompt : systemPrompt;
+    const historyForOpenAI  = req.file ? [] : historyMessages;
+
     const messages = [
-      { role: "system", content: systemPrompt },
-      ...historyMessages,
+      { role: "developer", content: finalSystemPrompt },
+      ...historyForOpenAI,
       { role: "user", content: userContent },
     ];
+
+    // TEMP DIAG
+    logger.info({ systemPrompt, historyCount: historyMessages.length, hasFile: !!req.file, intent, contextLen: context.length }, "openai call");
 
     // D7: configurable OpenAI parameters
     const r = await getOpenAIClient().chat.completions.create({
       model:       MODEL,
       messages,
-      temperature: parseFloat(process.env.OPENAI_TEMPERATURE || "0.3"),
-      max_tokens:  parseInt(process.env.OPENAI_MAX_TOKENS   || "1500"),
+      max_completion_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || "16000"),
     });
 
+    logger.info({ finish_reason: r.choices?.[0]?.finish_reason, content_len: r.choices?.[0]?.message?.content?.length ?? -1, content_preview: r.choices?.[0]?.message?.content?.slice(0, 200) }, "openai raw reply");
     const reply = r.choices?.[0]?.message?.content || "";
 
     // D8: update conversation history (blocking — data must persist before response)
@@ -647,6 +663,24 @@ app.get("/{*path}", (req, res) => {
   res.sendFile(path.join(__dirname, "../rinkbot-frontend/dist/browser/index.html"));
 });
 
+// --------------------
+// GLOBAL ERROR HANDLER — debe estar DESPUÉS de todas las rutas
+// --------------------
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  logger.error(
+    { err, url: req.url, method: req.method, status },
+    "Unhandled error"
+  );
+  const message =
+    process.env.NODE_ENV === "production"
+      ? "Error interno del servidor"
+      : (err.message || "Error desconocido");
+  if (!res.headersSent) {
+    res.status(status).json({ ok: false, error: message });
+  }
+});
+
 const PORT = Number(process.env.PORT || 3000);
 
 // --------------------
@@ -683,6 +717,18 @@ if (certsExist) {
     logger.info(startInfo, "server started (HTTP — certs not found, mic disabled on LAN)");
   });
 }
+
+// --------------------
+// PROCESS HANDLERS — promesas rechazadas y excepciones no capturadas
+// --------------------
+process.on("unhandledRejection", (reason, promise) => {
+  logger.fatal({ reason, promise }, "unhandledRejection — revisar código");
+});
+
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err }, "uncaughtException — proceso terminando");
+  process.exit(1);
+});
 
 // Graceful shutdown — Railway (y Docker) envían SIGTERM antes de detener el contenedor.
 // Dejamos que las peticiones en vuelo terminen (máx 10s) antes de cerrar.

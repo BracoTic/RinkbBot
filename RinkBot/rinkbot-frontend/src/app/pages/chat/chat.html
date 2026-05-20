@@ -41,6 +41,10 @@
     <button class="icon-btn" title="Configuración"
             [class.active]="openPanel() === 'ajustes'"
             (click)="togglePanel('ajustes')">⚙️</button>
+
+    <button class="icon-btn" title="Dark/Light" (click)="toggleDark()">
+      {{ prefsSvc.isDark() ? '☀️' : '🌙' }}
+    </button>
   </nav>
 
   <!-- Logout -->
@@ -142,17 +146,6 @@
         @if (fileError) {
           <div class="file-error">{{ fileError }}</div>
         }
-        @if (uploadProgress() !== null) {
-          <div class="upload-progress-bar">
-            <div class="upload-progress-fill"
-                 [style.width.%]="uploadProgress()">
-            </div>
-            <span class="upload-progress-label">
-              Subiendo imagen {{ uploadProgress() }}%
-            </span>
-          </div>
-        }
-
         <div class="composer-row">
           <input #chatFileInput type="file" accept="image/jpeg,image/png,image/gif,image/webp"
                  style="display:none" (change)="onFileSelect($event)">
@@ -254,18 +247,6 @@
      RAIL DERECHO
 ════════════════════════════════════════════════════════ -->
 <aside class="right-rail">
-  <div class="right-top">
-    <button class="icon-btn" title="Dark/Light" (click)="toggleDark()">
-      {{ prefsSvc.isDark() ? '☀️' : '🌙' }}
-    </button>
-  </div>
-
-  <nav class="right-nav">
-    <button class="icon-btn" title="Próximamente">🎧</button>
-    <button class="icon-btn" title="Próximamente">✉️</button>
-    <button class="icon-btn" title="Próximamente">🎥</button>
-  </nav>
-
   <div class="right-bottom">
     <button class="hseq-btn" title="HSEQ">
       <img src="assets/HSEQLogo.png" alt="HSEQ" class="hseq-logo" />

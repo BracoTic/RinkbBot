@@ -1,0 +1,170 @@
+// ═══════════════════════════════════════════════════════════
+// RinkBot – Global Styles
+// Paleta corporativa HSEQ · Serinco
+// ═══════════════════════════════════════════════════════════
+
+// ── Paleta de colores ────────────────────────────────────────
+$primary:         #1a4c8f;   // azul corporativo principal
+$primary-light:   #2563eb;   // variante clara (dark mode, accents)
+$primary-dim:     rgba(26, 76, 143, 0.12);  // tint para fondos activos
+
+$surface:         rgba(255, 255, 255, 0.72);  // fondo de paneles / cards
+$surface-solid:   #ffffff;
+$surface-dark:    rgba(15, 23, 42, 0.82);    // fondo de paneles en dark
+
+$text-primary:    #0b2a57;   // texto principal (azul muy oscuro)
+$text-secondary:  #4a6a9c;   // texto secundario / subtítulos
+$text-inverse:    #ffffff;   // texto sobre fondos oscuros
+
+$danger:          #dc2626;   // rojo para errores / grabación activa
+$border:          rgba(11, 42, 87, 0.12);  // líneas divisorias sutiles
+$shadow:          0 4px 20px rgba(0, 0, 0, 0.12);
+
+// ── Breakpoints ──────────────────────────────────────────────
+$mobile: 480px;
+$tablet: 768px;
+
+// ── Mixins de responsividad ──────────────────────────────────
+@mixin mobile  { @media (max-width: $mobile) { @content; } }
+@mixin tablet  { @media (max-width: $tablet) { @content; } }
+@mixin desktop { @media (min-width: ($tablet + 1px)) { @content; } }
+
+// ═══════════════════════════════════════════════════════════
+// Reset & base
+// ═══════════════════════════════════════════════════════════
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin:  0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden; // app fullscreen; cada componente maneja su scroll interno
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: $text-primary;
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+// Elimina el outline por defecto y lo reemplaza con uno accesible
+:focus-visible {
+  outline: 2px solid $primary;
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+// Imágenes y media no se desbordan
+img,
+video,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+// Botones heredan fuente
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+// Quita el arrastre de imágenes por defecto
+img { -webkit-user-drag: none; user-select: none; }
+
+// ═══════════════════════════════════════════════════════════
+// Tipografía base
+// ═══════════════════════════════════════════════════════════
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  color: $text-primary;
+}
+
+p { line-height: 1.6; }
+
+a {
+  color: $primary;
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Utilidades de accesibilidad
+// ═══════════════════════════════════════════════════════════
+
+// Visualmente oculto pero legible por screen readers
+.sr-only {
+  position: absolute;
+  width:  1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Loading dots  –  animación de tres puntos para respuestas del bot
+//
+// Uso:
+//   <div class="loading-dots">
+//     <span></span><span></span><span></span>
+//   </div>
+// ═══════════════════════════════════════════════════════════
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 2px;
+
+  span {
+    display: block;
+    width:  8px;
+    height: 8px;
+    border-radius: 50%;
+    background: $primary;
+    opacity: 0.25;
+    animation: _ld-blink 1.3s infinite ease-in-out both;
+
+    &:nth-child(1) { animation-delay: 0s;    }
+    &:nth-child(2) { animation-delay: 0.22s; }
+    &:nth-child(3) { animation-delay: 0.44s; }
+  }
+}
+
+@keyframes _ld-blink {
+  0%, 80%, 100% {
+    opacity:   0.2;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity:   1;
+    transform: scale(1.2);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Scrollbar global  –  sutil, coherente con la paleta
+// ═══════════════════════════════════════════════════════════
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background:    rgba(26, 76, 143, 0.22);
+  border-radius: 4px;
+  &:hover { background: rgba(26, 76, 143, 0.42); }
+}

@@ -12,13 +12,23 @@ const sslRejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== undefin
   ? process.env.DB_SSL_REJECT_UNAUTHORIZED === "true"
   : isProduction;
 
+// Acepta DATABASE_URL (Railway / Supabase connection string) o variables individuales
+const poolConfig = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: sslRejectUnauthorized },
+    }
+  : {
+      host:     process.env.DB_HOST,
+      port:     Number(process.env.DB_PORT),
+      user:     process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+      ssl:      { rejectUnauthorized: sslRejectUnauthorized },
+    };
+
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  ssl: { rejectUnauthorized: sslRejectUnauthorized },
+  ...poolConfig,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,

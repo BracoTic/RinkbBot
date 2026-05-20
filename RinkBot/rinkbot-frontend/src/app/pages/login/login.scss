@@ -1,0 +1,199 @@
+@use 'sass:color';
+
+// ── Variables ────────────────────────────────────────────
+$primary:     #0b2a57;
+$primary-mid: #1a4c8f;
+$border:      rgba(26, 76, 143, 0.16);
+$radius-pill: 999px;
+
+// ── Host: ocupa toda la ventana con el fondo ─────────────
+:host {
+  display: block;
+  min-height: 100vh;
+  background: url('/assets/FondoRinko2.png') center / cover no-repeat fixed;
+  font-family: 'Inter', 'Overpass', system-ui, sans-serif;
+  color: $primary;
+  overflow-x: hidden;
+}
+
+// ── Card contenedor ──────────────────────────────────────
+.login-shell {
+  width: clamp(760px, 74vw, 1100px);
+  margin: 100px auto;
+  background: #fff;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.18);
+}
+
+.login-frame {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 520px;
+  align-items: stretch;
+}
+
+// ── Imagen izquierda ─────────────────────────────────────
+.image-side { display: flex; }
+
+.image-ocelote {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 28px 0 0 28px;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+// ── Formulario derecho ───────────────────────────────────
+.form-card {
+  background: #fff;
+  padding: 48px 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-logo {
+  width: 300px;
+  max-width: 100%;
+  margin: 8px 0 24px;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+// ── Formulario ───────────────────────────────────────────
+.login-form {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  input {
+    height: 46px;
+    border-radius: $radius-pill;
+    border: 5px solid rgba(98, 161, 255, 0.1);
+    background: #fff;
+    padding: 0 18px;
+    font-size: 15px;
+    color: $primary;
+    outline: none;
+    box-shadow: 0 8px 24px rgba(13, 64, 134, 0.078),
+                inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+    &::placeholder { color: rgba(11, 42, 87, 0.5); }
+
+    &:focus {
+      border-color: $primary-mid;
+      box-shadow: inset 0 6px 10px rgba(0, 0, 0, 0.08),
+                  0 0 0 3px rgba(26, 76, 143, 0.1);
+    }
+  }
+}
+
+// ── Botón ────────────────────────────────────────────────
+.btn-login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 50px;
+  padding: 0.9rem 1.8rem;
+  border-radius: $radius-pill;
+  background: $primary-mid;
+  border: 13px solid rgba(98, 161, 255, 0.1);
+  color: #fff;
+  font-family: 'Overpass', sans-serif;
+  font-weight: 300;
+  font-size: 25px;
+  line-height: 36px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(13, 64, 134, 0.25),
+              inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+  transition: transform 0.15s ease, box-shadow 0.2s ease,
+              opacity 0.2s ease, border-color 0.2s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 28px rgba(26, 76, 143, 0.32);
+    border-color: rgba(255, 255, 255, 0.9);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(255, 255, 255, 0.8);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+}
+
+// ── Spinner ──────────────────────────────────────────────
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+// ── Mensaje de error ─────────────────────────────────────
+.error-message {
+  min-height: 20px;
+  margin-top: 12px;
+  font-size: 14px;
+  color: #c0392b;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+
+  &.visible { opacity: 1; }
+}
+
+// ── Responsive ───────────────────────────────────────────
+@media (max-width: 900px) {
+  .login-shell {
+    width: min(92vw, 560px);
+    margin: 40px auto;
+    box-shadow: none;
+  }
+
+  .login-frame { grid-template-columns: 1fr; }
+
+  .image-ocelote {
+    height: 220px;
+    object-fit: cover;
+    border-radius: 28px 28px 0 0;
+  }
+
+  .form-card {
+    border-radius: 0 0 28px 28px;
+    padding: 28px 20px;
+  }
+
+  .login-logo { width: 240px; }
+
+  .login-form {
+    max-width: 420px;
+    gap: 14px;
+  }
+}

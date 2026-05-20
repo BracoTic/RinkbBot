@@ -1,11 +1,12 @@
 import {
   Component, inject, signal, ViewChild, ElementRef,
-  effect, OnDestroy, ChangeDetectionStrategy,
+  effect, OnDestroy, ChangeDetectionStrategy, SecurityContext,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { Subscription } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 
@@ -23,7 +24,16 @@ export type PanelId =
   | 'soporte'  | 'notificaciones' | 'reunion' | 'hseq' | 'inicio'
   | null;
 
-marked.use({ breaks: true, gfm: true });
+marked.use({
+  breaks: true,
+  gfm: true,
+  renderer: {
+    link({ href, title, text }: { href: string; title?: string | null; text: string }): string {
+      const titleAttr = title ? ` title="${title}"` : '';
+      return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+    }
+  }
+});
 
 @Component({
   selector: 'app-chat',
@@ -77,16 +87,12 @@ export class Chat implements OnDestroy {
   imagePreview: string | null = null;
   fileError = '';
 
-  // ── Upload progress ───────────────────────────────────────
-  readonly uploadProgress = signal<number | null>(null);
-
   // ── Error ────────────────────────────────────────────────
   readonly apiError = signal('');
 
   // ── Voz ──────────────────────────────────────────────────
   voiceError = '';
   private voiceSub: Subscription | null = null;
-  private sendSub:  Subscription | null = null;
 
   // ── Avatar upload ────────────────────────────────────────
   readonly avatarPreview = signal<string | null>(null);
@@ -141,18 +147,12 @@ export class Chat implements OnDestroy {
     this.imagePreview = null;
     this.fileError    = '';
     this.apiError.set('');
-    if (file) this.uploadProgress.set(0);
     if (this.activeSection() !== 'chat') this.showSection('chat');
-    this.sendSub = this.chatSvc.sendMessage(text, file, preview).subscribe({
-      next: (val) => {
-        if (typeof val === 'number') this.uploadProgress.set(val);
-      },
+    this.chatSvc.sendMessage(text, file, preview).subscribe({
       error: (err: HttpErrorResponse) => {
-        this.uploadProgress.set(null);
         if (err.status === 401) this.auth.logout();
         else this.apiError.set('No se pudo obtener respuesta. Intenta de nuevo.');
       },
-      complete: () => this.uploadProgress.set(null),
     });
   }
 
@@ -348,7 +348,7 @@ export class Chat implements OnDestroy {
     this.voiceSub = this.voiceSvc.startListening().subscribe({
       next: transcript => {
         this.chatSvc.sendMessage(transcript).subscribe({
-          next: reply => { if (typeof reply === 'string') this.voiceSvc.speak(reply); },
+          next: reply => this.voiceSvc.speak(reply),
           error: () => {},
         });
       },
@@ -359,7 +359,21 @@ export class Chat implements OnDestroy {
   // ── Markdown ─────────────────────────────────────────────
 
   md(text: string): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(marked.parse(text) as string);
+    const parsed = marked.parse(text) as string;
+    const clean = DOMPurify.sanitize(parsed, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'em', 'u', 's',
+        'ul', 'ol', 'li',
+        'code', 'pre',
+        'h1', 'h2', 'h3', 'h4',
+        'a', 'blockquote', 'hr',
+        'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      ],
+      ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
+      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'javascript'],
+    });
+    return this.sanitizer.sanitize(SecurityContext.HTML, clean) ?? '';
   }
 
   // ── Auth ─────────────────────────────────────────────────
@@ -370,7 +384,6 @@ export class Chat implements OnDestroy {
 
   ngOnDestroy(): void {
     this.voiceSub?.unsubscribe();
-    this.sendSub?.unsubscribe();
     this.voiceSvc.stopSpeaking();
   }
 }
