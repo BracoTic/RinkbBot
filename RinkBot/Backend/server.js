@@ -175,9 +175,7 @@ app.get("/health", async (req, res) => {
     await dbPing();
     dbMs = Date.now() - t;
     dbOk = true;
-  } catch (err) {
-    logger.error(`health: db ping failed — ${err.message}`);
-  }
+  } catch (_) {}
 
   const mem = process.memoryUsage();
   const status = dbOk ? "ok" : "degraded";
